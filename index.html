@@ -108,7 +108,6 @@
         const tdCtx = topDownCanvas.getContext('2d');
         let chartInstance = null;
 
-        // Memory Bank Variables
         let snapIntensity = null;
         let snapEnvelope = null;
         let snapColor = 'rgba(255, 255, 255, 0.4)';
@@ -116,7 +115,6 @@
         const POINTS = 800;
         const x_vals = Array.from({length: POINTS}, (_, i) => -0.01 + (i / (POINTS - 1)) * 0.02);
 
-        // Bessel Function J1(x) Approximation
         function j1(x) {
             let ax = Math.abs(x);
             let y, ans1, ans2;
@@ -190,10 +188,8 @@
             return { intensity, envelope };
         }
 
-        // Memory Bank Functions
         function saveSnapshot() {
             const data = computePhysics();
-            // Create a deep copy of the arrays into memory
             snapIntensity = [...data.intensity];
             snapEnvelope = [...data.envelope];
             const rgb = waveToRGB(parseFloat(sliders.lam.value));
@@ -244,7 +240,6 @@
                 { label: 'Live Envelope', data: data.envelope, borderColor: 'red', borderWidth: 1.5, borderDash: [5, 5], pointRadius: 0, tension: 0.1 }
             ];
 
-            // Dynamically inject the memory arrays if they exist
             if (snapIntensity) {
                 currentDatasets.push({ label: 'Snapshot Intensity', data: snapIntensity, borderColor: snapColor, borderWidth: 2, borderDash: [2, 2], pointRadius: 0, tension: 0.1 });
                 currentDatasets.push({ label: 'Snapshot Envelope', data: snapEnvelope, borderColor: 'rgba(150, 150, 150, 0.5)', borderWidth: 1, borderDash: [5, 5], pointRadius: 0, tension: 0.1 });
@@ -267,6 +262,39 @@
                     scales: {
                         x: { title: { display: true, text: 'Position on Screen (mm)', color: 'white' }, ticks: { color: '#ccc', maxTicksLimit: 20 } },
                         y: { title: { display: true, text: 'Relative Intensity', color: 'white' }, min: 0, max: 1.05, ticks: { color: '#ccc' } }
+                    },
+                    // THIS IS THE PATCH: The missing event listener is back.
+                    onHover: (e, activeElements) => {
+                        if (activeElements.length > 0) {
+                            let idx = activeElements[0].index;
+                            let x_pos = x_vals[idx];
+                            let lam = parseFloat(sliders.lam.value) * 1e-9;
+                            let d = parseFloat(sliders.d.value) * 1e-3;
+                            let a = parseFloat(sliders.a.value) * 1e-3;
+                            let L = parseFloat(sliders.L.value);
+
+                            let path_diff = d * (x_pos / L);
+                            let alpha = (Math.PI * d * x_pos) / (lam * L);
+                            let beta = (Math.PI * a * x_pos) / (lam * L);
+                            let spacing = shapeSelect.value === 'rect' ? (((lam * L) / d) * 1000).toFixed(3) : "N/A (Circular)";
+
+                            document.getElementById('theoryPanel').innerHTML = `
+                                <strong>Real-Time Math</strong><br><br>
+                                Max Spacing: <span id="out_spacing">${spacing}</span> mm<br>
+                                Path Diff (Δx): ${(path_diff*1e9).toFixed(0)} nm<br>
+                                Phase (α): ${(alpha/Math.PI).toFixed(2)}π rad<br>
+                                Phase (β): ${(beta/Math.PI).toFixed(2)}π rad
+                            `;
+                        } else {
+                            let spacing = shapeSelect.value === 'rect' ? (((parseFloat(sliders.lam.value) * 1e-9 * parseFloat(sliders.L.value)) / (parseFloat(sliders.d.value) * 1e-3)) * 1000).toFixed(3) : "N/A (Circular)";
+                            document.getElementById('theoryPanel').innerHTML = `
+                                <strong>Real-Time Math</strong><br><br>
+                                Max Spacing: <span id="out_spacing">${spacing}</span> mm<br>
+                                Path Diff (Δx): Hover over chart<br>
+                                Phase (α): Hover over chart<br>
+                                Phase (β): Hover over chart
+                            `;
+                        }
                     }
                 }
             });
