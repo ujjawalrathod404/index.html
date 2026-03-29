@@ -38,3 +38,230 @@
             <label>Slit Distance (mm) <span id="val_d">2.00</span></label>
             <input type="range" id="d" min="0.1" max="5.0" value="2.0" step="0.01">
         </div>
+        <div class="control-group">
+            <label>Slit Width (mm) <span id="val_a">0.30</span></label>
+            <input type="range" id="a" min="0.05" max="1.0" value="0.3" step="0.01">
+        </div>
+        <div class="control-group">
+            <label>Screen Distance (m) <span id="val_L">1.00</span></label>
+            <input type="range" id="L" min="0.5" max="2.0" value="1.0" step="0.01">
+        </div>
+
+        <div class="info-panel" id="theoryPanel">
+            <strong>Real-Time Math</strong><br><br>
+            Max Spacing: <span id="out_spacing">--</span> mm<br>
+            Path Diff (Δx): Hover over chart<br>
+            Phase (α): Hover over chart<br>
+            Phase (β): Hover over chart
+        </div>
+    </div>
+
+    <div class="main-content">
+        <div>
+            <h3>1. Top-Down Wave Propagation</h3>
+            <canvas id="topDownCanvas"></canvas>
+        </div>
+        <div>
+            <h3>2. Screen Intensity Pattern</h3>
+            <canvas id="patternCanvas"></canvas>
+        </div>
+        <div class="chart-container">
+            <canvas id="intensityChart"></canvas>
+        </div>
+    </div>
+
+    <script>
+        // DOM Elements
+        const sliders = {
+            lam: document.getElementById('lam'),
+            N: document.getElementById('N'),
+            d: document.getElementById('d'),
+            a: document.getElementById('a'),
+            L: document.getElementById('L')
+        };
+        const patternCanvas = document.getElementById('patternCanvas');
+        const ctxPattern = patternCanvas.getContext('2d');
+        const topDownCanvas = document.getElementById('topDownCanvas');
+        const tdCtx = topDownCanvas.getContext('2d');
+        let chartInstance = null;
+
+        const POINTS = 800;
+        const x_vals = Array.from({length: POINTS}, (_, i) => -0.01 + (i / (POINTS - 1)) * 0.02);
+
+        function waveToRGB(nm) {
+            let r=0, g=0, b=0;
+            if(nm >= 400 && nm < 440) { r = -(nm - 440) / (440 - 400); b = 1.0; }
+            else if(nm >= 440 && nm < 490) { g = (nm - 440) / (490 - 440); b = 1.0; }
+            else if(nm >= 490 && nm < 510) { g = 1.0; b = -(nm - 510) / (510 - 490); }
+            else if(nm >= 510 && nm < 580) { r = (nm - 510) / (580 - 510); g = 1.0; }
+            else if(nm >= 580 && nm < 645) { r = 1.0; g = -(nm - 645) / (645 - 580); }
+            else if(nm >= 645 && nm <= 700) { r = 1.0; }
+            return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)];
+        }
+
+        function computePhysics() {
+            const lam = parseFloat(sliders.lam.value) * 1e-9;
+            const N = parseInt(sliders.N.value);
+            const d = parseFloat(sliders.d.value) * 1e-3;
+            const a = parseFloat(sliders.a.value) * 1e-3;
+            const L = parseFloat(sliders.L.value);
+
+            let intensity = new Array(POINTS);
+            let envelope = new Array(POINTS);
+
+            for (let i = 0; i < POINTS; i++) {
+                let x = x_vals[i];
+                let beta = (Math.PI * a * x) / (lam * L);
+                let alpha = (Math.PI * d * x) / (lam * L);
+
+                let diff = (beta === 0) ? 1.0 : Math.pow(Math.sin(beta) / beta, 2);
+                envelope[i] = diff;
+
+                let inter = 1.0;
+                if (N > 1) {
+                    if (Math.abs(Math.sin(alpha)) > 1e-8) {
+                        inter = Math.pow(Math.sin(N * alpha) / Math.sin(alpha), 2) / (N * N);
+                    }
+                }
+                intensity[i] = diff * inter;
+            }
+
+            let spacing = (d !== 0 && N > 1) ? ((lam * L) / d) * 1000 : 0;
+            document.getElementById('out_spacing').innerText = spacing.toFixed(3);
+            return { intensity, envelope };
+        }
+
+        function renderPattern(intensity) {
+            patternCanvas.width = patternCanvas.clientWidth;
+            patternCanvas.height = patternCanvas.clientHeight;
+            const rgb = waveToRGB(sliders.lam.value);
+            const w = patternCanvas.width / POINTS;
+
+            ctxPattern.clearRect(0, 0, patternCanvas.width, patternCanvas.height);
+            for (let i = 0; i < POINTS; i++) {
+                let alpha = Math.pow(intensity[i], 0.5); 
+                ctxPattern.fillStyle = `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${alpha})`;
+                ctxPattern.fillRect(i * w, 0, Math.ceil(w), patternCanvas.height);
+            }
+        }
+
+        function renderChart(data) {
+            if (chartInstance) {
+                chartInstance.data.datasets[0].data = data.intensity;
+                chartInstance.data.datasets[1].data = data.envelope;
+                chartInstance.update('none'); 
+                return;
+            }
+
+            const ctx = document.getElementById('intensityChart').getContext('2d');
+            chartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: x_vals.map(x => (x * 1000).toFixed(1)),
+                    datasets: [
+                        { label: 'Total Intensity', data: data.intensity, borderColor: 'cyan', borderWidth: 2, pointRadius: 0, tension: 0.1 },
+                        { label: 'Diffraction Envelope', data: data.envelope, borderColor: 'red', borderWidth: 1.5, borderDash: [5, 5], pointRadius: 0, tension: 0.1 }
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false, animation: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: { legend: { labels: { color: 'white' } } },
+                    scales: {
+                        x: { title: { display: true, text: 'Position on Screen (mm)', color: 'white' }, ticks: { color: '#ccc', maxTicksLimit: 20 } },
+                        y: { title: { display: true, text: 'Relative Intensity', color: 'white' }, min: 0, max: 1.05, ticks: { color: '#ccc' } }
+                    },
+                    onHover: (e, activeElements) => {
+                        if (activeElements.length > 0) {
+                            let idx = activeElements[0].index;
+                            let x_pos = x_vals[idx];
+                            let lam = parseFloat(sliders.lam.value) * 1e-9;
+                            let d = parseFloat(sliders.d.value) * 1e-3;
+                            let a = parseFloat(sliders.a.value) * 1e-3;
+                            let L = parseFloat(sliders.L.value);
+
+                            let path_diff = d * (x_pos / L);
+                            let alpha = (Math.PI * d * x_pos) / (lam * L);
+                            let beta = (Math.PI * a * x_pos) / (lam * L);
+
+                            document.getElementById('theoryPanel').innerHTML = `
+                                <strong>Real-Time Math</strong><br><br>
+                                Max Spacing: <span id="out_spacing">${((lam * L) / d * 1000).toFixed(3)}</span> mm<br>
+                                Path Diff (Δx): ${(path_diff*1e9).toFixed(0)} nm<br>
+                                Phase (α): ${(alpha/Math.PI).toFixed(2)}π rad<br>
+                                Phase (β): ${(beta/Math.PI).toFixed(2)}π rad
+                            `;
+                        }
+                    }
+                }
+            });
+        }
+
+        // Top-Down Wave Propagation Engine
+        const tdWidth = 200; 
+        const tdHeight = 100;
+        topDownCanvas.width = tdWidth;
+        topDownCanvas.height = tdHeight;
+        const imgData = tdCtx.createImageData(tdWidth, tdHeight);
+        let waveTime = 0;
+
+        function renderTopDownWaves() {
+            const lam = parseFloat(sliders.lam.value);
+            const N = parseInt(sliders.N.value);
+            const d = parseFloat(sliders.d.value);
+            const rgb = waveToRGB(lam);
+
+            const k = (2 * Math.PI) / (lam / 25); 
+            const omega = 0.4; 
+            
+            let slitXs = [];
+            const slitSpacing = d * 15; 
+            const startX = (tdWidth / 2) - ((N - 1) * slitSpacing) / 2;
+            for(let i=0; i<N; i++) slitXs.push(startX + i * slitSpacing);
+
+            let dataIndex = 0;
+            for (let y = 0; y < tdHeight; y++) {
+                const py = tdHeight - y; 
+                const fade = Math.max(0, 1 - (py / tdHeight)); 
+
+                for (let x = 0; x < tdWidth; x++) {
+                    let amp = 0;
+                    for(let i=0; i<N; i++) {
+                        const dx = x - slitXs[i];
+                        const distance = Math.sqrt(dx*dx + py*py);
+                        amp += Math.cos(k * distance - waveTime * omega);
+                    }
+                    
+                    amp = amp / N; 
+                    const intensityVal = ((amp + 1) / 2) * fade; 
+                    
+                    imgData.data[dataIndex++] = rgb[0] * intensityVal; 
+                    imgData.data[dataIndex++] = rgb[1] * intensityVal; 
+                    imgData.data[dataIndex++] = rgb[2] * intensityVal; 
+                    imgData.data[dataIndex++] = 255;                   
+                }
+            }
+            tdCtx.putImageData(imgData, 0, 0);
+            waveTime += 1;
+            requestAnimationFrame(renderTopDownWaves); 
+        }
+
+        function updateAll() {
+            Object.keys(sliders).forEach(key => {
+                document.getElementById('val_' + key).innerText = parseFloat(sliders[key].value).toFixed(key === 'lam' || key === 'N' ? 0 : 2);
+            });
+            const data = computePhysics();
+            renderPattern(data.intensity);
+            renderChart(data);
+        }
+
+        Object.values(sliders).forEach(slider => {
+            slider.addEventListener('input', updateAll);
+        });
+
+        window.addEventListener('resize', () => renderPattern(computePhysics().intensity));
+        updateAll();
+        renderTopDownWaves(); 
+    </script>
+</body>
+</html>
