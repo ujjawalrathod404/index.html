@@ -8,15 +8,15 @@
     <style>
         * { box-sizing: border-box; font-family: Arial, sans-serif; }
         body { background-color: #0d0d0d; color: white; margin: 0; display: flex; height: 100vh; overflow: hidden; }
-        .sidebar { width: 340px; background-color: #111; padding: 20px; border-right: 2px solid #333; display: flex; flex-direction: column; overflow-y: auto; }
+        .sidebar { width: 340px; background-color: #111; padding: 20px; border-right: 2px solid #333; display: flex; flex-direction: column; overflow-y: auto; z-index: 10; }
         .main-content { flex-grow: 1; padding: 20px; display: flex; flex-direction: column; gap: 15px; overflow-y: auto; }
         h2, h3 { color: cyan; margin-top: 0; margin-bottom: 5px; }
         .control-group { margin-bottom: 12px; }
         .control-group label { display: flex; justify-content: space-between; font-size: 13px; font-weight: bold; margin-bottom: 5px; color: #ccc; }
         input[type="range"] { width: 100%; cursor: pointer; }
         select { width: 100%; padding: 6px; background: #222; color: white; border: 1px solid #444; border-radius: 4px; cursor: pointer; margin-top: 5px; }
-        button { padding: 8px; border: none; font-weight: bold; cursor: pointer; border-radius: 4px; transition: 0.2s; }
-        button:hover { filter: brightness(1.2); }
+        button.action-btn { padding: 8px; border: none; font-weight: bold; cursor: pointer; border-radius: 4px; transition: 0.2s; }
+        button.action-btn:hover { filter: brightness(1.2); }
         .btn-save { background: #00aaff; color: white; flex: 1; }
         .btn-clear { background: #aa0000; color: white; flex: 1; }
         .flex-row { display: flex; gap: 10px; margin-top: 5px; }
@@ -26,6 +26,31 @@
         #patternCanvas { width: 100%; height: 120px; border: 1px solid #333; }
         .chart-container { flex-grow: 1; position: relative; border: 1px solid #333; border-radius: 4px; background: #0d0d0d; padding: 10px; min-height: 250px; }
         .disabled { opacity: 0.4; pointer-events: none; }
+
+        /* ✨ AI Tutor UI Styles */
+        #ai-chat-widget { position: fixed; bottom: 20px; right: 20px; z-index: 1000; display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
+        #ai-chat-toggle { background: #00ffff; color: #000; border: none; padding: 12px 24px; border-radius: 30px; font-weight: bold; font-size: 16px; cursor: pointer; box-shadow: 0 4px 20px rgba(0, 255, 255, 0.3); transition: transform 0.2s, box-shadow 0.2s; }
+        #ai-chat-toggle:hover { transform: scale(1.05); box-shadow: 0 6px 25px rgba(0, 255, 255, 0.5); }
+        #ai-chat-panel { width: 380px; height: 500px; background: #1a1f29; border: 1px solid #333; border-radius: 12px; display: none; flex-direction: column; overflow: hidden; box-shadow: 0 15px 40px rgba(0,0,0,0.9); transform-origin: bottom right; animation: scaleUp 0.2s ease-out; }
+        @keyframes scaleUp { from { opacity: 0; transform: scale(0.8); } to { opacity: 1; transform: scale(1); } }
+        #ai-chat-header { background: #111; padding: 15px; border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center; color: #00ffff; font-weight: bold; font-size: 16px; }
+        #ai-chat-header button { background: none; border: none; color: #aaa; cursor: pointer; font-size: 18px; padding: 0; transition: color 0.2s; }
+        #ai-chat-header button:hover { color: white; }
+        #ai-chat-history { flex-grow: 1; padding: 15px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+        .chat-msg { padding: 12px 16px; border-radius: 8px; font-size: 14px; line-height: 1.5; max-width: 85%; word-wrap: break-word; }
+        .chat-msg.user { background: #333; color: white; align-self: flex-end; border-bottom-right-radius: 0; }
+        .chat-msg.ai { background: rgba(0, 255, 255, 0.08); border: 1px solid rgba(0, 255, 255, 0.2); color: #e0e0e0; align-self: flex-start; border-bottom-left-radius: 0; }
+        .chat-msg.ai strong { color: #00ffff; }
+        #ai-chat-input-area { padding: 15px; border-top: 1px solid #333; background: #111; display: flex; gap: 10px; }
+        #ai-chat-input { flex-grow: 1; padding: 12px; border-radius: 6px; border: 1px solid #444; background: #222; color: white; outline: none; font-size: 14px; transition: border-color 0.2s; }
+        #ai-chat-input:focus { border-color: #00ffff; }
+        #ai-chat-input-area button { background: #00ffff; color: #000; border: none; padding: 0 20px; border-radius: 6px; font-weight: bold; cursor: pointer; transition: background 0.2s; }
+        #ai-chat-input-area button:hover { background: #00cccc; }
+        .loading-dots { color: #00ffff; font-size: 24px; align-self: flex-start; margin-left: 10px; display: none; line-height: 1; }
+        @keyframes blink { 0%, 100% { opacity: 0.2; } 50% { opacity: 1; } }
+        .loading-dots span { animation: blink 1.4s infinite; }
+        .loading-dots span:nth-child(2) { animation-delay: 0.2s; }
+        .loading-dots span:nth-child(3) { animation-delay: 0.4s; }
     </style>
 </head>
 <body>
@@ -65,8 +90,8 @@
         <div class="control-group">
             <label>Data Memory Bank</label>
             <div class="flex-row">
-                <button class="btn-save" onclick="saveSnapshot()">Save Snapshot</button>
-                <button class="btn-clear" onclick="clearSnapshot()">Clear</button>
+                <button class="action-btn btn-save" onclick="saveSnapshot()">Save Snapshot</button>
+                <button class="action-btn btn-clear" onclick="clearSnapshot()">Clear</button>
             </div>
         </div>
 
@@ -93,7 +118,27 @@
         </div>
     </div>
 
+    <!-- ✨ AI Tutor Widget -->
+    <div id="ai-chat-widget">
+        <div id="ai-chat-panel">
+            <div id="ai-chat-header">
+                <span>✨ AI Physics Tutor</span>
+                <button onclick="toggleChat()">✖</button>
+            </div>
+            <div id="ai-chat-history">
+                <div class="chat-msg ai">Hello! I am your AI Physics Tutor. I can see your current simulation settings. Try asking me: <br><br><em>"Why does the pattern stretch when I increase the wavelength?"</em></div>
+            </div>
+            <div class="loading-dots" id="loading-indicator"><span>.</span><span>.</span><span>.</span></div>
+            <div id="ai-chat-input-area">
+                <input type="text" id="ai-chat-input" placeholder="Ask a physics question..." onkeypress="handleKeyPress(event)">
+                <button onclick="sendChatMessage()">Send</button>
+            </div>
+        </div>
+        <button id="ai-chat-toggle" onclick="toggleChat()">✨ Ask AI Tutor</button>
+    </div>
+
     <script>
+        // --- Core Application Logic ---
         const sliders = {
             lam: document.getElementById('lam'),
             N: document.getElementById('N'),
@@ -115,6 +160,7 @@
         const POINTS = 800;
         const x_vals = Array.from({length: POINTS}, (_, i) => -0.01 + (i / (POINTS - 1)) * 0.02);
 
+        // Bessel Function J1(x) Approximation
         function j1(x) {
             let ax = Math.abs(x);
             let y, ans1, ans2;
@@ -263,7 +309,6 @@
                         x: { title: { display: true, text: 'Position on Screen (mm)', color: 'white' }, ticks: { color: '#ccc', maxTicksLimit: 20 } },
                         y: { title: { display: true, text: 'Relative Intensity', color: 'white' }, min: 0, max: 1.05, ticks: { color: '#ccc' } }
                     },
-                    // THIS IS THE PATCH: The missing event listener is back.
                     onHover: (e, activeElements) => {
                         if (activeElements.length > 0) {
                             let idx = activeElements[0].index;
@@ -359,12 +404,115 @@
             renderChart(data);
         }
 
+        // --- ✨ Gemini API Integration (AI Tutor) ---
+        const apiKey = ""; // API Key injected automatically by environment
+
+        function toggleChat() {
+            const panel = document.getElementById('ai-chat-panel');
+            const toggleBtn = document.getElementById('ai-chat-toggle');
+            if (panel.style.display === 'flex') {
+                panel.style.display = 'none';
+                toggleBtn.style.display = 'block';
+            } else {
+                panel.style.display = 'flex';
+                toggleBtn.style.display = 'none';
+                document.getElementById('ai-chat-input').focus();
+            }
+        }
+
+        function handleKeyPress(e) {
+            if (e.key === 'Enter') sendChatMessage();
+        }
+
+        function appendMessage(text, sender) {
+            const history = document.getElementById('ai-chat-history');
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `chat-msg ${sender}`;
+            
+            // Format basic bold markdown returned by Gemini
+            const formattedText = text.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
+            msgDiv.innerHTML = formattedText;
+            
+            history.appendChild(msgDiv);
+            history.scrollTop = history.scrollHeight;
+        }
+
+        function getContextString() {
+            // This forces the AI to know EXACTLY what the user is looking at
+            return `[System Context: The user is interacting with an Optical Interference Simulator. 
+Current live settings:
+- Aperture Type: ${shapeSelect.value === 'rect' ? 'Rectangular Slit(s)' : 'Circular Pinhole (Airy Disk)'}
+- Wavelength (λ): ${sliders.lam.value} nm
+- Number of Slits (N): ${shapeSelect.value === 'circ' ? '1' : sliders.N.value}
+- Slit Distance (d): ${sliders.d.value} mm
+- Slit/Pinhole Width (a): ${sliders.a.value} mm
+- Screen Distance (L): ${sliders.L.value} m
+Use this data to give hyper-specific, educational physics answers.]\n\nUser Question: `;
+        }
+
+        async function fetchGeminiWithRetry(prompt, retries = 5) {
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+            const payload = {
+                contents: [{ parts: [{ text: prompt }] }],
+                systemInstruction: { parts: [{ text: "You are a brilliant, concise physics professor integrated into an Optical Simulator. Answer the user's questions about interference and diffraction. Always refer to their current slider settings (provided in the context) to explain what they are seeing on screen. Keep answers short, punchy, and educational. Use simple HTML formatting if needed." }] }
+            };
+
+            let delay = 1000;
+            for (let i = 0; i < retries; i++) {
+                try {
+                    const response = await fetch(url, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                    const data = await response.json();
+                    return data.candidates[0].content.parts[0].text;
+                } catch (e) {
+                    if (i === retries - 1) throw e;
+                    await new Promise(res => setTimeout(res, delay));
+                    delay *= 2;
+                }
+            }
+        }
+
+        async function sendChatMessage() {
+            const inputField = document.getElementById('ai-chat-input');
+            const message = inputField.value.trim();
+            if (!message) return;
+
+            // Display user message
+            appendMessage(message, 'user');
+            inputField.value = '';
+            
+            // Show loading
+            const loadingIndicator = document.getElementById('loading-indicator');
+            loadingIndicator.style.display = 'flex';
+            const history = document.getElementById('ai-chat-history');
+            history.scrollTop = history.scrollHeight;
+
+            try {
+                // Bundle the context + question
+                const fullPrompt = getContextString() + message;
+                const response = await fetchGeminiWithRetry(fullPrompt);
+                
+                loadingIndicator.style.display = 'none';
+                appendMessage(response, 'ai');
+            } catch (error) {
+                loadingIndicator.style.display = 'none';
+                appendMessage("Network error: Unable to connect to the AI Tutor. Please check your connection or try again later.", 'ai');
+            }
+        }
+
+        // --- Initialization ---
         Object.values(sliders).forEach(slider => slider.addEventListener('input', updateAll));
         shapeSelect.addEventListener('change', toggleUI);
-
         window.addEventListener('resize', () => renderPattern(computePhysics().intensity));
+        
         updateAll();
-        renderTopDownWaves(); 
+        window.onload = function() {
+            renderTopDownWaves(); 
+        }
     </script>
 </body>
 </html>
