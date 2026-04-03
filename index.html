@@ -406,7 +406,17 @@
         // ---> CAREFULLY PASTE YOUR API KEY HERE: <---
         // Secure Session Storage Implementation
         // Remove the sessionStorage prompt and put your key here
-        const apiKey = "AIzaSyCjJ5hpW4lUxEdguLZZ87zHzLvVGFiWNQw";
+        // Secure Session Storage Implementation
+        let apiKey = sessionStorage.getItem("gemini_api_key");
+
+        if (!apiKey || apiKey === "null") {
+            apiKey = prompt("Secure AI Initialization:\nPlease enter the Gemini API Key to activate the AI Physics Tutor:");
+            if (apiKey) {
+                 sessionStorage.setItem("gemini_api_key", apiKey.trim());
+            } else {
+            alert("AI Tutor disabled. Refresh the page to enter a key.");
+            }
+        }
         // ---------------------------------------------
 
         function toggleChat() {
