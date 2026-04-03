@@ -27,7 +27,7 @@
         .chart-container { flex-grow: 1; position: relative; border: 1px solid #333; border-radius: 4px; background: #0d0d0d; padding: 10px; min-height: 250px; }
         .disabled { opacity: 0.4; pointer-events: none; }
 
-        /* ✨ AI Tutor UI Styles */
+        /* AI Tutor UI Styles */
         #ai-chat-widget { position: fixed; bottom: 20px; right: 20px; z-index: 1000; display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
         #ai-chat-toggle { background: #00ffff; color: #000; border: none; padding: 12px 24px; border-radius: 30px; font-weight: bold; font-size: 16px; cursor: pointer; box-shadow: 0 4px 20px rgba(0, 255, 255, 0.3); transition: transform 0.2s, box-shadow 0.2s; }
         #ai-chat-toggle:hover { transform: scale(1.05); box-shadow: 0 6px 25px rgba(0, 255, 255, 0.5); }
@@ -118,7 +118,6 @@
         </div>
     </div>
 
-    <!-- ✨ AI Tutor Widget -->
     <div id="ai-chat-widget">
         <div id="ai-chat-panel">
             <div id="ai-chat-header">
@@ -138,7 +137,6 @@
     </div>
 
     <script>
-        // --- Core Application Logic ---
         const sliders = {
             lam: document.getElementById('lam'),
             N: document.getElementById('N'),
@@ -160,7 +158,6 @@
         const POINTS = 800;
         const x_vals = Array.from({length: POINTS}, (_, i) => -0.01 + (i / (POINTS - 1)) * 0.02);
 
-        // Bessel Function J1(x) Approximation
         function j1(x) {
             let ax = Math.abs(x);
             let y, ans1, ans2;
@@ -405,7 +402,20 @@
         }
 
         // --- ✨ Gemini API Integration (AI Tutor) ---
-        const apiKey = ""; // API Key injected automatically by environment
+        
+        // ---> CAREFULLY PASTE YOUR API KEY HERE: <---
+        // Secure Session Storage Implementation
+        let apiKey = sessionStorage.getItem("gemini_api_key");
+
+        if (!apiKey || apiKey === "null") {
+            apiKey = prompt("Secure AI Initialization:\nPlease enter the Gemini API Key to activate the AI Physics Tutor:");
+            if (apiKey) {
+                sessionStorage.setItem("gemini_api_key", apiKey.trim());
+            } else {
+                alert("AI Tutor disabled. Refresh the page to enter a key.");
+            }
+        }
+        // ---------------------------------------------
 
         function toggleChat() {
             const panel = document.getElementById('ai-chat-panel');
@@ -428,17 +438,13 @@
             const history = document.getElementById('ai-chat-history');
             const msgDiv = document.createElement('div');
             msgDiv.className = `chat-msg ${sender}`;
-            
-            // Format basic bold markdown returned by Gemini
             const formattedText = text.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
             msgDiv.innerHTML = formattedText;
-            
             history.appendChild(msgDiv);
             history.scrollTop = history.scrollHeight;
         }
 
         function getContextString() {
-            // This forces the AI to know EXACTLY what the user is looking at
             return `[System Context: The user is interacting with an Optical Interference Simulator. 
 Current live settings:
 - Aperture Type: ${shapeSelect.value === 'rect' ? 'Rectangular Slit(s)' : 'Circular Pinhole (Airy Disk)'}
@@ -450,30 +456,52 @@ Current live settings:
 Use this data to give hyper-specific, educational physics answers.]\n\nUser Question: `;
         }
 
-        async function fetchGeminiWithRetry(prompt, retries = 5) {
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+        async function fetchGeminiWithRetry(prompt) {
+            const cleanKey = apiKey.trim();
+
+            // STEP 1: Ask Google what models your specific key is actually allowed to use.
+            const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${cleanKey}`;
+            const listResponse = await fetch(listUrl);
+
+            if (!listResponse.ok) {
+                const err = await listResponse.text();
+                throw new Error("Invalid API Key");
+            }
+
+            const listData = await listResponse.json();
+
+            // STEP 2: Automatically find the best working model for your key
+            const workingModel = listData.models.find(m => 
+                m.supportedGenerationMethods.includes("generateContent") && 
+                m.name.includes("gemini")
+            );
+
+            if (!workingModel) {
+                throw new Error("No available models.");
+            }
+
+            // STEP 3: Send the physics question to the dynamically found model
+            const generateUrl = `https://generativelanguage.googleapis.com/v1beta/${workingModel.name}:generateContent?key=${cleanKey}`;
+            
+            const combinedPrompt = "You are a concise physics tutor explaining an Optical Simulator. Keep it short. " + prompt;
+            
             const payload = {
-                contents: [{ parts: [{ text: prompt }] }],
-                systemInstruction: { parts: [{ text: "You are a brilliant, concise physics professor integrated into an Optical Simulator. Answer the user's questions about interference and diffraction. Always refer to their current slider settings (provided in the context) to explain what they are seeing on screen. Keep answers short, punchy, and educational. Use simple HTML formatting if needed." }] }
+                contents: [{ parts: [{ text: combinedPrompt }] }]
             };
 
-            let delay = 1000;
-            for (let i = 0; i < retries; i++) {
-                try {
-                    const response = await fetch(url, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(payload)
-                    });
-                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-                    const data = await response.json();
-                    return data.candidates[0].content.parts[0].text;
-                } catch (e) {
-                    if (i === retries - 1) throw e;
-                    await new Promise(res => setTimeout(res, delay));
-                    delay *= 2;
-                }
+            const response = await fetch(generateUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`Google API Error ${response.status}: ${errorText}`);
             }
+
+            const data = await response.json();
+            return data.candidates[0].content.parts[0].text;
         }
 
         async function sendChatMessage() {
@@ -481,18 +509,15 @@ Use this data to give hyper-specific, educational physics answers.]\n\nUser Ques
             const message = inputField.value.trim();
             if (!message) return;
 
-            // Display user message
             appendMessage(message, 'user');
             inputField.value = '';
             
-            // Show loading
             const loadingIndicator = document.getElementById('loading-indicator');
             loadingIndicator.style.display = 'flex';
             const history = document.getElementById('ai-chat-history');
             history.scrollTop = history.scrollHeight;
 
             try {
-                // Bundle the context + question
                 const fullPrompt = getContextString() + message;
                 const response = await fetchGeminiWithRetry(fullPrompt);
                 
@@ -500,11 +525,12 @@ Use this data to give hyper-specific, educational physics answers.]\n\nUser Ques
                 appendMessage(response, 'ai');
             } catch (error) {
                 loadingIndicator.style.display = 'none';
-                appendMessage("Network error: Unable to connect to the AI Tutor. Please check your connection or try again later.", 'ai');
+                // This now prints the raw error code directly to the chat
+                appendMessage(`**CRITICAL ERROR:**<br>${error.message}`, 'ai');
+                console.error("FULL TRACE:", error);
             }
         }
 
-        // --- Initialization ---
         Object.values(sliders).forEach(slider => slider.addEventListener('input', updateAll));
         shapeSelect.addEventListener('change', toggleUI);
         window.addEventListener('resize', () => renderPattern(computePhysics().intensity));
